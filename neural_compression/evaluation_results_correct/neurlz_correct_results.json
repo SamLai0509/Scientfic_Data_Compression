@@ -1,0 +1,185 @@
+{
+  "results": [
+    {
+      "file": "dark_matter_density.f32",
+      "eb_mode": 1,
+      "absolute_error_bound": 1e-06,
+      "relative_error_bound": 0.0005,
+      "pwr_error_bound": 0.0,
+      "spatial_dims": 2,
+      "slice_order": "zxy",
+      "val_split": 0.1,
+      "track_losses": true,
+      "num_res_blocks": 2,
+      "baseline": {
+        "compressed_size": 1664895,
+        "ratio": 322.4653278434976,
+        "max_error": 6.889459609985352,
+        "mean_error": 0.7225884199142456,
+        "psnr": 81.42214328050613,
+        "nrmse": 8.489716128678992e-05,
+        "within_bound": false,
+        "violation_ratio": 99.9967522919178,
+        "compress_time": 1.5859320163726807,
+        "decompress_time": 0.5586509704589844
+      },
+      "neurlz": {
+        "compressed_size": 1680699,
+        "sz3_size": 1664895,
+        "weights_size": 15804,
+        "ratio": 319.43311205635274,
+        "sz3_ratio": 322.4653278434976,
+        "max_error": 115.5908203125,
+        "mean_error": 0.4349355399608612,
+        "psnr": 84.1709454357624,
+        "nrmse": 6.186614336911589e-05,
+        "within_bound": false,
+        "violation_ratio": 99.99973997473717,
+        "compress_time": 4071.110271692276,
+        "decompress_time": 2.734766721725464,
+        "training_time": 4068.0460579395294,
+        "model_params": 3761,
+        "base_max_error": 6.889459609985352,
+        "base_mean_error": 0.7225884199142456
+      },
+      "improvements": {
+        "ratio_pct": -0.9403230441619725,
+        "psnr_db": 2.7488021552562714,
+        "mean_error_pct": 39.80867564678192
+      }
+    },
+    {
+      "file": "dark_matter_density.f32",
+      "eb_mode": 1,
+      "absolute_error_bound": 1e-06,
+      "relative_error_bound": 5e-05,
+      "pwr_error_bound": 0.0,
+      "spatial_dims": 2,
+      "slice_order": "zxy",
+      "val_split": 0.1,
+      "track_losses": true,
+      "num_res_blocks": 2,
+      "baseline": {
+        "compressed_size": 13259237,
+        "ratio": 40.49033228684275,
+        "max_error": 0.6889467239379883,
+        "mean_error": 0.2362642139196396,
+        "psnr": 93.4948480129242,
+        "nrmse": 2.1147445295355283e-05,
+        "within_bound": false,
+        "violation_ratio": 99.996667355299,
+        "compress_time": 2.1211047172546387,
+        "decompress_time": 0.7963552474975586
+      },
+      "neurlz": {
+        "compressed_size": 13275041,
+        "sz3_size": 13259237,
+        "weights_size": 15804,
+        "ratio": 40.442128351995294,
+        "sz3_ratio": 40.49033228684275,
+        "max_error": 6.513427734375,
+        "mean_error": 0.18095485866069794,
+        "psnr": 95.36775708198547,
+        "nrmse": 1.7045607819454744e-05,
+        "within_bound": false,
+        "violation_ratio": 99.99965652823448,
+        "compress_time": 4082.2820596694946,
+        "decompress_time": 3.0446503162384033,
+        "training_time": 4079.554147005081,
+        "model_params": 3761,
+        "base_max_error": 0.6889467239379883,
+        "base_mean_error": 0.2362642139196396
+      },
+      "improvements": {
+        "ratio_pct": -0.11905047976877858,
+        "psnr_db": 1.8729090690612793,
+        "mean_error_pct": 23.40995818376541
+      }
+    },
+    {
+      "file": "dark_matter_density.f32",
+      "eb_mode": 1,
+      "absolute_error_bound": 1e-06,
+      "relative_error_bound": 5e-06,
+      "pwr_error_bound": 0.0,
+      "spatial_dims": 2,
+      "slice_order": "zxy",
+      "val_split": 0.1,
+      "track_losses": true,
+      "num_res_blocks": 2,
+      "baseline": {
+        "compressed_size": 60541252,
+        "ratio": 8.867852815465396,
+        "max_error": 0.06889466941356659,
+        "mean_error": 0.03320684656500816,
+        "psnr": 111.0654354095459,
+        "nrmse": 2.7972323550784495e-06,
+        "within_bound": false,
+        "violation_ratio": 99.99542310833931,
+        "compress_time": 2.4837841987609863,
+        "decompress_time": 1.8886334896087646
+      },
+      "neurlz": {
+        "compressed_size": 60557056,
+        "sz3_size": 60541252,
+        "weights_size": 15804,
+        "ratio": 8.865538509665992,
+        "sz3_ratio": 8.867852815465396,
+        "max_error": 0.7978515625,
+        "mean_error": 0.03145627677440643,
+        "psnr": 111.36847019195557,
+        "nrmse": 2.7013252292817924e-06,
+        "within_bound": false,
+        "violation_ratio": 99.99833926558495,
+        "compress_time": 3466.5565259456635,
+        "decompress_time": 3.096876382827759,
+        "training_time": 3464.8286118507385,
+        "model_params": 3761,
+        "base_max_error": 0.06889466941356659,
+        "base_mean_error": 0.03320684656500816
+      },
+      "improvements": {
+        "ratio_pct": -0.026097701975469345,
+        "psnr_db": 0.30303478240966797,
+        "mean_error_pct": 5.271713435649872
+      }
+    }
+  ],
+  "averages": {
+    "ratio_improvement_pct": -0.3618237419687402,
+    "psnr_improvement_db": 1.6415820022424061,
+    "mean_error_improvement_pct": 22.830115755399067
+  },
+  "config": {
+    "data_dir": "/Users/923714256/Data_compression/SDRBENCH-EXASKY-NYX-512x512x512",
+    "sz_lib": "/Users/923714256/Data_compression/SZ3/build/lib64/libSZ3c.so",
+    "test_files": [
+      "dark_matter_density.f32"
+    ],
+    "eb_modes": [
+      1
+    ],
+    "absolute_error_bounds": [
+      1e-06
+    ],
+    "relative_error_bounds": [
+      0.0005,
+      5e-05,
+      5e-06
+    ],
+    "pwr_error_bounds": [
+      0.0
+    ],
+    "output_dir": "/Users/923714256/Data_compression/neural_compression/evaluation_results_correct",
+    "device": "cuda",
+    "online_epochs": 300,
+    "learning_rate": 0.001,
+    "model_channels": 4,
+    "model": "tiny_frequency_residual_predictor",
+    "num_res_blocks": 2,
+    "spatial_dims": 2,
+    "slice_order": "zxy",
+    "val_split": 0.1,
+    "track_losses": true
+  }
+}
