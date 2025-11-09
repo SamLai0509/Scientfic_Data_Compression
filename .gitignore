@@ -1,0 +1,53 @@
+# Large data files
+*.f32
+*.dat
+*.bin
+
+# Data directories (add if these contain large datasets)
+data_compression_result/
+data_compression_result_reconstructed/
+SDRBENCH-EXASKY-NYX-512x512x512/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SZ3 build artifacts (if large)
+SZ3/build/
+SZ3/cmake-build-*/
+
+# Output files
+*.out
+*.log
+*.pth
+*.pt
+*.pkl
+*.pickle
+
+# Temporary files
+*.tmp
+*.tempSZ3/

@@ -1,0 +1,137 @@
+[
+  {
+    "filename": "velocity_x.f32",
+    "error_bound": 2.0,
+    "compression": {
+      "original_size": 536870912,
+      "latent_size": 2048,
+      "quantized_size": 512,
+      "compressed_size": 14,
+      "compression_ratio": 38347922.28571428,
+      "encode_time": 3.752251148223877,
+      "quantization_time": 0.007020473480224609,
+      "entropy_coding_time": 7.748603820800781e-05,
+      "total_time": 3.94677472114563,
+      "throughput_MB_s": 129.72617799968623,
+      "latent_entropy": 0.0,
+      "output_path": "/Users/923714256/Data_compression/pure_neural_compression/evaluation_results/velocity_x.f32.compressed",
+      "file_size": 20757
+    },
+    "decompression": {
+      "entropy_decode_time": 1.6450881958007812e-05,
+      "dequantization_time": 0.0002219676971435547,
+      "decode_time": 0.09821891784667969,
+      "total_time": 0.09905552864074707,
+      "throughput_MB_s": 5168.818005675514
+    },
+    "quality": {
+      "max_error": 54215560.0,
+      "mean_error": 5857260.5,
+      "std_error": 6436860.5,
+      "mse": 55299729784832.0,
+      "rmse": 7436378.80858903,
+      "psnr": 20.8790398167723,
+      "nrmse": 0.09037493733370364,
+      "data_range": 82283640.0,
+      "within_bound": false,
+      "violation_count": 134217695,
+      "violation_ratio": 0.9999997541308403,
+      "error_percentiles": {
+        "p50": 4757927.0,
+        "p90": 12503686.299999997,
+        "p95": 14598659.649999991,
+        "p99": 18677974.0
+      }
+    }
+  },
+  {
+    "filename": "velocity_y.f32",
+    "error_bound": 2.0,
+    "compression": {
+      "original_size": 536870912,
+      "latent_size": 2048,
+      "quantized_size": 512,
+      "compressed_size": 14,
+      "compression_ratio": 38347922.28571428,
+      "encode_time": 3.79726505279541,
+      "quantization_time": 0.006964445114135742,
+      "entropy_coding_time": 5.936622619628906e-05,
+      "total_time": 3.9922006130218506,
+      "throughput_MB_s": 128.2500679775327,
+      "latent_entropy": 0.0,
+      "output_path": "/Users/923714256/Data_compression/pure_neural_compression/evaluation_results/velocity_y.f32.compressed",
+      "file_size": 20757
+    },
+    "decompression": {
+      "entropy_decode_time": 1.430511474609375e-05,
+      "dequantization_time": 0.0002148151397705078,
+      "decode_time": 0.06264710426330566,
+      "total_time": 0.06345963478088379,
+      "throughput_MB_s": 8068.120810462526
+    },
+    "quality": {
+      "max_error": 53849528.0,
+      "mean_error": 4378999.0,
+      "std_error": 4784896.0,
+      "mse": 30379803148288.0,
+      "rmse": 5511787.654499037,
+      "psnr": 25.21215792110794,
+      "nrmse": 0.05487722017870748,
+      "data_range": 100438536.0,
+      "within_bound": false,
+      "violation_count": 134217694,
+      "violation_ratio": 0.9999997466802597,
+      "error_percentiles": {
+        "p50": 3599468.75,
+        "p90": 9068280.0,
+        "p95": 10945043.0,
+        "p99": 14696634.460000008
+      }
+    }
+  },
+  {
+    "filename": "velocity_z.f32",
+    "error_bound": 2.0,
+    "compression": {
+      "original_size": 536870912,
+      "latent_size": 2048,
+      "quantized_size": 512,
+      "compressed_size": 14,
+      "compression_ratio": 38347922.28571428,
+      "encode_time": 3.78151535987854,
+      "quantization_time": 0.006908893585205078,
+      "entropy_coding_time": 5.5789947509765625e-05,
+      "total_time": 3.975440740585327,
+      "throughput_MB_s": 128.79075136826597,
+      "latent_entropy": 0.0,
+      "output_path": "/Users/923714256/Data_compression/pure_neural_compression/evaluation_results/velocity_z.f32.compressed",
+      "file_size": 20757
+    },
+    "decompression": {
+      "entropy_decode_time": 1.3113021850585938e-05,
+      "dequantization_time": 0.0002052783966064453,
+      "decode_time": 0.0677790641784668,
+      "total_time": 0.06853890419006348,
+      "throughput_MB_s": 7470.209891015852
+    },
+    "quality": {
+      "max_error": 40895704.0,
+      "mean_error": 2949919.5,
+      "std_error": 3325018.25,
+      "mse": 14720145817600.0,
+      "rmse": 3836684.2217727536,
+      "psnr": 25.50655645213295,
+      "nrmse": 0.05304838629168801,
+      "data_range": 72324240.0,
+      "within_bound": false,
+      "violation_count": 134217660,
+      "violation_ratio": 0.9999994933605194,
+      "error_percentiles": {
+        "p50": 2420148.5,
+        "p90": 6016168.0,
+        "p95": 7469926.0,
+        "p99": 11508307.460000008
+      }
+    }
+  }
+]

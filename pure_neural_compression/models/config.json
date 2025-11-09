@@ -1,0 +1,35 @@
+{
+  "data_dir": "/Users/923714256/Data_compression/SDRBENCH-EXASKY-NYX-512x512x512",
+  "train_files": [
+    "velocity_x.f32",
+    "velocity_y.f32"
+  ],
+  "val_files": [
+    "velocity_z.f32"
+  ],
+  "data_shape": [
+    512,
+    512,
+    512
+  ],
+  "spatial_channels": 16,
+  "freq_channels": 16,
+  "latent_dim": 512,
+  "decoder_channels": 32,
+  "num_epochs": 100,
+  "batch_size": 4,
+  "learning_rate": 0.01,
+  "error_bound": 2.0,
+  "lambda_eb": 1.0,
+  "use_patches": false,
+  "patch_shape": [
+    128,
+    128,
+    128
+  ],
+  "patches_per_volume": 10,
+  "output_dir": "/Users/923714256/Data_compression/pure_neural_compression/models/",
+  "save_interval": 10,
+  "device": "cuda",
+  "multi_gpu": true
+}
