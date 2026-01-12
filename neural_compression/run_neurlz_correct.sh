@@ -1,12 +1,14 @@
 #!/bin/bash
-#SBATCH --job-name=SZ3+NeurLZ        # Job name
-#SBATCH --partition=gpucluster            # Partition name
-#SBATCH --time=8:00:00                   # Time limit hrs:min:sec
-#SBATCH --output=5e-4_physics3d_xyz_physics_adaptive_loss%j.out   # Standard output and error log
-#SBATCH --ntasks=1                        # Number of tasks
-#SBATCH --cpus-per-task=4                 # Number of CPU cores per task
+#SBATCH --job-name=SZ3+NeurLZ
+#SBATCH --partition=gpucluster
+#SBATCH --time=8:00:00     
+#SBATCH --output=4inputfreq3d_multiloss_postprocess%j.out
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4   
+#SBATCH --nodes=1                   
 
-srun nvidia-smi
+
+nvidia-smi
 
 echo "========================================="
 echo "NeurLZ Evaluation (Correct Implementation)"
@@ -19,6 +21,8 @@ echo "  4. Storage: SZ3_bytes + DNN_weights + outliers"
 echo "========================================="
 
 cd /Users/923714256/Data_compression/neural_compression
+source /Users/923714256/miniconda3/bin/activate
+# conda activate grandlib
 
 # ============================================================
 # Multi-GPU Configuration
@@ -59,7 +63,7 @@ if [ "$GPU_MODE" == "multi" ]; then
     done <<< "$GPU_INFO"
     
     # Set CUDA_VISIBLE_DEVICES to all GPUs (comma-separated) 
-    CUDA_DEVICES=$(IFS=','; echo "${AVAILABLE_GPUS[*]}")
+    CUDA_DEVICES=0,1,2,3 #$(IFS=','; echo "${AVAILABLE_GPUS[*]}")
     export CUDA_VISIBLE_DEVICES=$CUDA_DEVICES
     echo "Multi-GPU mode: Using GPUs ${CUDA_DEVICES}"
     echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
@@ -108,12 +112,12 @@ ERROR_RELATIVE_BOUNDS="5e-4"
 ERROR_PWR_BOUNDS="0"
 # NeurLZ modes
 EB_MODES="1"
-MODEL="tiny_physics_residual_predictor"
+MODEL="tiny_frequency_residual_predictor_4_inputs"
 
 # Online training parameters
-ONLINE_EPOCHS=200
+ONLINE_EPOCHS=100
 LEARNING_RATE=1e-3
-MODEL_CHANNELS=4  # 4 channels → ~3k params (as in paper)
+MODEL_CHANNELS=2 # 2 channels → ~3k params (as in paper)
 NUM_RES_BLOCKS=2
 # Device
 DEVICE="cuda"
@@ -121,8 +125,9 @@ DEVICE="cuda"
 SPATIAL_DIMS=3
 SLICE_ORDER="zxy"
 VAL_SPLIT=0.1
-TRACK_LOSSES=True
-
+# TRACK_LOSSES is a boolean flag, no value needed (--track_losses enables it)
+TRACK_LOSSES=true  # set to "true" or "false"
+NUM_RUNS=5
 mkdir -p $OUTPUT_DIR
 
 echo ""
@@ -141,9 +146,16 @@ echo "  Slice order: $SLICE_ORDER"
 echo "  Validation split: $VAL_SPLIT"
 echo "  Track losses: $TRACK_LOSSES"
 echo "  GPU mode: $GPU_MODE"
+echo "  Number of runs: $NUM_RUNS"
 echo ""
 
-srun --partition=gpucluster python evaluate_neurlz_correct.py \
+# Build track_losses flag (store_true args don't take values)
+TRACK_LOSSES_FLAG=""
+if [ "$TRACK_LOSSES" = "true" ]; then
+    TRACK_LOSSES_FLAG="--track_losses"
+fi
+
+python evaluate_neurlz_correct.py \
     --data_dir "$DATA_DIR" \
     --sz_lib "$SZ_LIB" \
     --test_files $TEST_FILES \
@@ -161,10 +173,5 @@ srun --partition=gpucluster python evaluate_neurlz_correct.py \
     --spatial_dims $SPATIAL_DIMS \
     --slice_order $SLICE_ORDER \
     --val_split $VAL_SPLIT \
-    --track_losses $TRACK_LOSSES
-
-echo ""
-echo "========================================="
-echo "Evaluation complete!"
-echo "Results saved to: $OUTPUT_DIR"
-echo "========================================="
+    --num_runs $NUM_RUNS \
+    $TRACK_LOSSES_FLAG

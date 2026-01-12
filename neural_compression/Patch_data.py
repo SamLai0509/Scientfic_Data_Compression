@@ -284,3 +284,274 @@ def get_dataset_info(train_dataset, val_dataset, patch_size, spatial_dims):
         info += f", Val={len(val_dataset)}"
     
     return info
+
+
+# ============================================================
+# Skipping Sampling
+# ============================================================
+
+
+def create_strided_datasets(x_data, y_data, stride=4, spatial_dims=3,
+                            val_split=0.1, shuffle=True, seed=42):
+    """
+    NeurLZ 风格的跳跃采样：从整个数据集中稀疏采样点。
+    
+    这与 patch 采样不同：
+    - Patch 采样: 将数据切成不重叠的块
+    - 跳跃采样: 每隔 stride 个点采样一个，保持全局分布
+    
+    Args:
+        x_data: 输入数据 (H, W, D) 或 (N, H, W)
+        y_data: 目标数据 (同形状)
+        stride: 采样步长 (每隔 stride 个点取一个)
+        spatial_dims: 2 或 3
+        val_split: 验证集比例
+        shuffle: 是否打乱
+        seed: 随机种子
+    
+    Returns:
+        train_dataset, val_dataset
+    """
+    np.random.seed(seed)
+    
+    if spatial_dims == 3:
+        # 3D 跳跃采样
+        h, w, d = x_data.shape
+        
+        # 生成采样网格
+        h_indices = np.arange(0, h, stride)
+        w_indices = np.arange(0, w, stride)
+        d_indices = np.arange(0, d, stride)
+        
+        # 创建所有采样点的索引
+        all_indices = []
+        for hi in h_indices:
+            for wi in w_indices:
+                for di in d_indices:
+                    all_indices.append((hi, wi, di))
+        
+        all_indices = np.array(all_indices)
+        
+    else:  # 2D
+        n_slices, h, w = x_data.shape
+        
+        h_indices = np.arange(0, h, stride)
+        w_indices = np.arange(0, w, stride)
+        
+        all_indices = []
+        for slice_idx in range(n_slices):
+            for hi in h_indices:
+                for wi in w_indices:
+                    all_indices.append((slice_idx, hi, wi))
+        
+        all_indices = np.array(all_indices)
+    
+    # 打乱并分割
+    if shuffle:
+        np.random.shuffle(all_indices)
+    
+    n_total = len(all_indices)
+    n_train = int(n_total * (1 - val_split))
+    
+    train_indices = all_indices[:n_train]
+    val_indices = all_indices[n_train:]
+    
+    # 创建数据集
+    train_dataset = StridedDataset(x_data, y_data, train_indices, spatial_dims)
+    val_dataset = StridedDataset(x_data, y_data, val_indices, spatial_dims) if len(val_indices) > 0 else None
+    
+    return train_dataset, val_dataset
+
+
+class StridedDataset:
+    """
+    跳跃采样数据集：存储采样点的索引，按需获取数据。
+    
+    与 PatchDataset 不同，这里存储的是点索引，不是预提取的 patch。
+    """
+    
+    def __init__(self, x_data, y_data, indices, spatial_dims, context_size=7):
+        """
+        Args:
+            x_data: 完整输入数据
+            y_data: 完整目标数据
+            indices: 采样点索引列表
+            spatial_dims: 2 或 3
+            context_size: 每个采样点周围的上下文窗口大小
+        """
+        self.x_data = x_data
+        self.y_data = y_data
+        self.indices = indices
+        self.spatial_dims = spatial_dims
+        self.context_size = context_size
+        self.half_ctx = context_size // 2
+    
+    def __len__(self):
+        return len(self.indices)
+    
+    def __getitem__(self, idx):
+        """
+        返回采样点周围的上下文窗口。
+        
+        对于每个采样点 (h, w, d)，返回以该点为中心的 context_size³ 窗口。
+        """
+        if self.spatial_dims == 3:
+            h, w, d = self.indices[idx]
+            H, W, D = self.x_data.shape
+            
+            # 计算窗口边界（带边界检查）
+            h_start = max(0, h - self.half_ctx)
+            h_end = min(H, h + self.half_ctx + 1)
+            w_start = max(0, w - self.half_ctx)
+            w_end = min(W, w + self.half_ctx + 1)
+            d_start = max(0, d - self.half_ctx)
+            d_end = min(D, d + self.half_ctx + 1)
+            
+            # 提取上下文窗口
+            x_patch = self.x_data[h_start:h_end, w_start:w_end, d_start:d_end]
+            y_patch = self.y_data[h_start:h_end, w_start:w_end, d_start:d_end]
+            
+        else:  # 2D
+            slice_idx, h, w = self.indices[idx]
+            H, W = self.x_data.shape[1], self.x_data.shape[2]
+            
+            h_start = max(0, h - self.half_ctx)
+            h_end = min(H, h + self.half_ctx + 1)
+            w_start = max(0, w - self.half_ctx)
+            w_end = min(W, w + self.half_ctx + 1)
+            
+            x_patch = self.x_data[slice_idx, h_start:h_end, w_start:w_end]
+            y_patch = self.y_data[slice_idx, h_start:h_end, w_start:w_end]
+        
+        return x_patch, y_patch
+
+
+def create_neurlz_style_datasets(x_data, y_data, spatial_dims=3,
+                                  stride=4, context_size=7,
+                                  val_split=0.1, seed=42):
+    """
+    完整的 NeurLZ 风格数据集创建函数。
+    
+    NeurLZ 的核心思想：
+    1. 不是切分成大的 patch，而是稀疏采样点
+    2. 每个采样点取一个小的上下文窗口
+    3. 网络学习：上下文窗口 → 中心点的残差
+    
+    Args:
+        x_data: SZ3 解压数据
+        y_data: 残差 (原始 - 解压)
+        spatial_dims: 2 或 3
+        stride: 采样步长
+        context_size: 上下文窗口大小（必须是奇数）
+        val_split: 验证集比例
+        seed: 随机种子
+    
+    Returns:
+        train_dataset, val_dataset
+    """
+    assert context_size % 2 == 1, "context_size 必须是奇数"
+    
+    return create_strided_datasets(
+        x_data, y_data, 
+        stride=stride,
+        spatial_dims=spatial_dims,
+        val_split=val_split,
+        shuffle=True,
+        seed=seed
+    )
+
+
+# ============================================================
+# 混合采样：结合 Patch 和 Strided 的优点
+# ============================================================
+
+def create_hybrid_datasets(x_data, y_data, patch_size=64, overlap=16,
+                           spatial_dims=3, val_split=0.1, seed=42):
+    """
+    Mixing Sampling: Using overlapping patches to reduce boundary effects.
+    
+    This is an improved version of Patch Sampling:
+    - Allow patches to overlap
+    - Reduce boundary discontinuity
+    
+    Args:
+        x_data: Input data
+        y_data: Target data
+        patch_size: Patch size
+        overlap: Overlap between patches
+        spatial_dims: 2 or 3
+        val_split: Validation set ratio
+        seed: Random seed
+    """
+    np.random.seed(seed)
+    
+    stride = patch_size - overlap
+    
+    if spatial_dims == 3:
+        all_patches_x, all_patches_y = _extract_3d_patches_with_overlap(
+            x_data, y_data, patch_size, stride
+        )
+    else:
+        all_patches_x, all_patches_y = _extract_2d_patches_with_overlap(
+            x_data, y_data, patch_size, stride
+        )
+    
+    # Split into train/val
+    total = len(all_patches_x)
+    indices = np.arange(total)
+    np.random.shuffle(indices)
+    
+    n_train = int(total * (1 - val_split))
+    train_idx = indices[:n_train]
+    val_idx = indices[n_train:]
+    
+    train_patches_x = [all_patches_x[i] for i in train_idx]
+    train_patches_y = [all_patches_y[i] for i in train_idx]
+    train_dataset = PatchDataset(train_patches_x, train_patches_y, spatial_dims)
+    
+    if len(val_idx) > 0:
+        val_patches_x = [all_patches_x[i] for i in val_idx]
+        val_patches_y = [all_patches_y[i] for i in val_idx]
+        val_dataset = PatchDataset(val_patches_x, val_patches_y, spatial_dims)
+    else:
+        val_dataset = None
+    
+    return train_dataset, val_dataset
+
+
+def _extract_3d_patches_with_overlap(x_data, y_data, patch_size, stride):
+    """Extract 3D patches with overlap"""
+    h, w, d = x_data.shape
+    
+    all_patches_x = []
+    all_patches_y = []
+    
+    for i in range(0, h - patch_size + 1, stride):
+        for j in range(0, w - patch_size + 1, stride):
+            for k in range(0, d - patch_size + 1, stride):
+                patch_x = x_data[i:i+patch_size, j:j+patch_size, k:k+patch_size]
+                patch_y = y_data[i:i+patch_size, j:j+patch_size, k:k+patch_size]
+                
+                all_patches_x.append(patch_x.copy())
+                all_patches_y.append(patch_y.copy())
+    
+    return all_patches_x, all_patches_y
+
+
+def _extract_2d_patches_with_overlap(x_data, y_data, patch_size, stride):
+    """Extract 2D patches with overlap"""
+    n_slices, h, w = x_data.shape
+    
+    all_patches_x = []
+    all_patches_y = []
+    
+    for s in range(n_slices):
+        for i in range(0, h - patch_size + 1, stride):
+            for j in range(0, w - patch_size + 1, stride):
+                patch_x = x_data[s, i:i+patch_size, j:j+patch_size]
+                patch_y = y_data[s, i:i+patch_size, j:j+patch_size]
+                
+                all_patches_x.append(patch_x.copy())
+                all_patches_y.append(patch_y.copy())
+    
+    return all_patches_x, all_patches_y
