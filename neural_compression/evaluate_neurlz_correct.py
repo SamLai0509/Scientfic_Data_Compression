@@ -180,7 +180,8 @@ def evaluate_baseline_sz3(sz, data, eb_mode, absolute_error_bound, relative_erro
 def evaluate_neurlz(compressor, data, eb_mode, absolute_error_bound, relative_error_bound, pwr_error_bound,
                     online_epochs=50, learning_rate=1e-3, model_channels=4, model='tiny_residual_predictor', 
                     num_res_blocks=1, spatial_dims=3, slice_order='zxy', val_split=0.1, track_losses=True, 
-                    evaluate_per_slice=True, enable_post_process=True, Patch_size=256):
+                    evaluate_per_slice=True, enable_post_process=True, Patch_size=256, Batch_size=512,
+                    save_components=False, components_dir='./compressed_components', filename='data'):
     """Evaluate NeurLZ compression."""
     print(f"\n{'─'*70}")
     print(f"NeurLZ: SZ3 + Online DNN Enhancement")
@@ -193,8 +194,13 @@ def evaluate_neurlz(compressor, data, eb_mode, absolute_error_bound, relative_er
         online_epochs=online_epochs, learning_rate=learning_rate,
         model_channels=model_channels, model=model, verbose=True,
         spatial_dims=spatial_dims, slice_order=slice_order, val_split=val_split,
-        track_losses=track_losses, num_res_blocks=num_res_blocks, Patch_size=Patch_size
+        track_losses=track_losses, num_res_blocks=num_res_blocks, Patch_size=Patch_size, Batch_size=Batch_size
     )
+    
+    # Save components if requested
+    if save_components:
+        base_name = os.path.splitext(filename)[0]
+        compressor.save_components(package, components_dir, base_name, verbose=True)
     
     # Decompress
     decompress_start = time.time()
@@ -255,12 +261,6 @@ def evaluate_neurlz(compressor, data, eb_mode, absolute_error_bound, relative_er
 
 
 def main():
-    # #region agent log
-    log_file = '/Users/923714256/.cursor/debug.log'
-    with open(log_file, 'a') as f:
-        json.dump({'sessionId': 'debug-session', 'runId': 'run1', 'hypothesisId': 'A', 'location': 'evaluate_neurlz_correct.py:257', 'message': 'Command line arguments received', 'data': {'sys_argv': sys.argv}, 'timestamp': int(time.time() * 1000)}, f)
-        f.write('\n')
-    # #endregion
     parser = argparse.ArgumentParser(description="Evaluate NeurLZ (Correct Implementation)")
     parser.add_argument('--data_dir', type=str, required=True,
                        help='Directory containing data files')
@@ -317,21 +317,19 @@ def main():
                        help='Evaluate reconstruction quality per slice')
     # parser.add_argument('--no_evaluate_per_slice', dest='evaluate_per_slice', action='store_false',
     #                    help='Disable per-slice evaluation')
-    parser.add_argument('--enable_post_process', action='store_true', default=True,
-                       help='Enable post-process')
+    parser.add_argument('--enable_post_process', action='store_true',
+                       help='Enable post-process (default: False)')
     parser.add_argument('--num_runs', type=int, default=1,
                     help='Number of runs for statistical evaluation (default: 1)')
     parser.add_argument('--Patch_size', type=int, default=256,
                        help='Patch size for local decompression and training')
-    # #region agent log
-    try:
-        args = parser.parse_args()
-    except SystemExit as e:
-        with open(log_file, 'a') as f:
-            json.dump({'sessionId': 'debug-session', 'runId': 'run1', 'hypothesisId': 'A', 'location': 'evaluate_neurlz_correct.py:318', 'message': 'argparse parsing failed', 'data': {'sys_argv': sys.argv, 'error_code': e.code}, 'timestamp': int(time.time() * 1000)}, f)
-            f.write('\n')
-        raise
-    # #endregion
+    parser.add_argument('--Batch_size', type=int, default=512,
+                       help='Batch size for training')
+    parser.add_argument('--save_components', action='store_true',
+                       help='Save SZ3 bytes, model weights, and metadata separately')
+    parser.add_argument('--components_dir', type=str, default='./compressed_components',
+                       help='Directory to save compressed components')
+    args = parser.parse_args()
     
     os.makedirs(args.output_dir, exist_ok=True)
     
@@ -364,6 +362,10 @@ def main():
     print(f"Evaluate per slice: {args.evaluate_per_slice}")
     print(f"Enable post-process: {args.enable_post_process}")
     print(f"Patch size: {args.Patch_size}")
+    print(f"Batch size: {args.Batch_size}")
+    print(f"Save components: {args.save_components}")
+    if args.save_components:
+        print(f"Components directory: {args.components_dir}")
     print(f"{'='*70}")
     
     # Initialize
@@ -427,6 +429,10 @@ def main():
                     evaluate_per_slice=args.evaluate_per_slice,
                     enable_post_process=args.enable_post_process,
                     Patch_size=args.Patch_size,
+                    Batch_size=args.Batch_size,
+                    save_components=args.save_components,
+                    components_dir=args.components_dir,
+                    filename=filename,
                 )
                 neurlz_runs.append(neurlz)
 

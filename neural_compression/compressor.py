@@ -14,6 +14,7 @@ Key differences from typical neural compression:
 # Standard Library Imports
 # =============================================================================
 import sys
+import os
 import json
 import pickle
 import time
@@ -125,7 +126,7 @@ class NeurLZCompressor:
                 model_channels=4, verbose=True, 
                 spatial_dims=3, slice_order='zxy',
                 val_split=0.1, track_losses=True,
-                Patch_size=256,
+                Patch_size=256,Batch_size=512,
                 ):
         """
         NeurLZ compression pipeline.
@@ -289,8 +290,8 @@ class NeurLZCompressor:
         elif model_type == 'tiny_frequency_residual_predictor_1_input':
             criterion = SpatialFrequencyLoss(
                 weight_spatial=1.0,
-                weight_magnitude=0,
-                weight_phase=0,
+                weight_magnitude=1,
+                weight_phase=1,
                 spatial_dims=spatial_dims
             )
             base_model = TinyFrequencyResidualPredictor_1_input(
@@ -449,7 +450,7 @@ class NeurLZCompressor:
 
         train_loader = PatchDataLoader(
             train_dataset, 
-            batch_size=512,
+            batch_size=Batch_size,
             shuffle=True,
             drop_last=False
         )
@@ -457,7 +458,7 @@ class NeurLZCompressor:
         if val_dataset is not None:
             val_loader = PatchDataLoader(
                 val_dataset,
-                batch_size=512,
+                batch_size=Batch_size,
                 shuffle=False,
                 drop_last=False
             )
@@ -684,6 +685,11 @@ class NeurLZCompressor:
                 pickle.dump(compressed_package, f, protocol=4)
             if verbose:
                 print(f"Saved to: {output_path}\n")
+            
+            # Also save individual components to the same directory
+            output_dir = os.path.dirname(output_path)
+            base_name = os.path.splitext(os.path.basename(output_path))[0]
+            self.save_components(compressed_package, output_dir, base_name, verbose)
         
         stats = {
             'original_size_mb': original_size / (1024**2),
@@ -706,7 +712,7 @@ class NeurLZCompressor:
         return compressed_package, stats
 
     def _error_bounded_post_process(self, x_enhanced, x_prime, absolute_error_bound, 
-                                    relative_error_bound=0.0, verbose=False):
+                                    relative_error_bound=0.0, verbose=False, a=0.5, block_size=256):
         """
         Error-bounded adaptive post-processing.
         
@@ -726,53 +732,38 @@ class NeurLZCompressor:
         Returns:
             x_post: Post-processed reconstruction
         """
-        # Calculate the enhancement (predicted residual)
-        enhancement = x_enhanced - x_prime
-        
-        # Compute effective error bound
         if relative_error_bound > 0:
             data_range = np.max(x_prime) - np.min(x_prime)
             effective_bound = relative_error_bound * data_range
         else:
             effective_bound = absolute_error_bound
-        
-        # Clip enhancement to ensure |enhancement| <= effective_bound
-        # This ensures |x_post - x_prime| <= error_bound
-        enhancement_clipped = np.clip(enhancement, -effective_bound, effective_bound)
-        
-        # Apply post-processing: smooth the clipped enhancement
-        # This reduces block artifacts while maintaining error bound
-        from scipy import ndimage
-        
-        # Light smoothing kernel (3x3x3 for 3D, 3x3 for 2D)
-        if x_enhanced.ndim == 3:
-            kernel_size = 3
-        else:
-            kernel_size = (3, 3, 3)
-        
-        # Smooth the clipped enhancement
-        enhancement_smooth = ndimage.gaussian_filter(
-            enhancement_clipped, 
-            sigma=0.5,  # Light smoothing
-            mode='nearest'
-        )
-        
-        # Ensure smoothing doesn't violate error bound
-        enhancement_final = np.clip(enhancement_smooth, 
-                                    -effective_bound, 
-                                    effective_bound)
-        
-        # Final post-processed reconstruction
-        x_post = x_prime + enhancement_final
-        
+
+
+        d = x_enhanced
+        d_prime = d.copy()
+        X, Y, Z = d.shape
+
+        for i in range(block_size - 1, X - 1, block_size):
+            d3 = d[i - 1, :, :]   # Left block inner point
+            d4 = d[i, :, :]       # Boundary point
+            d5 = d[i + 1, :, :]   # Right block inner point
+
+            # B(0.5) = 0.25*d3 + 0.5*d4 + 0.25*d5
+            B = 0.25 * d3 + 0.5 * d4 + 0.25 * d5
+
+
+            # d' = clamp(B, d4 ± a*eb)
+            upper = d4 + a * effective_bound
+            lower = d4 - a * effective_bound
+            d_prime[i, :, :] = np.maximum(np.minimum(B, upper), lower)
         if verbose:
-            max_enhancement = np.max(np.abs(enhancement_final))
-            print(f"  Post-processing applied:")
-            print(f"    Max enhancement: {max_enhancement:.3e}")
-            print(f"    Error bound: {effective_bound:.3e}")
-            print(f"    Bound compliance: {max_enhancement <= effective_bound}")
-        
-        return x_post
+            max_delta = np.max(np.abs(d_prime - d))
+            print(f"  Post-processing applied (Bezier boundary):")
+            print(f"    a: {a}, block_size: {block_size}")
+            print(f"    Effective bound: {effective_bound:.3e}")
+            print(f"    Max delta: {max_delta:.3e}")
+
+        return d_prime
     
     def decompress(self, compressed_package, verbose=True, enable_post_process=False):
         """
@@ -892,37 +883,47 @@ class NeurLZCompressor:
             x_prime_norm = (x_prime_for_pred - input_mean) / input_std
 
             if spatial_dims == 2:
-                x_prime_tensor = torch.from_numpy(x_prime_norm).float().unsqueeze(1).to(self.device)
+                # 2D: Process slices in batches to avoid OOM (same as compression)
+                batch_size_2d = metadata.get('batch_size', 8)  # Default batch size
+                n_slices = x_prime_norm.shape[0]
+                pred_residuals_list = []
+                
+                for batch_start in range(0, n_slices, batch_size_2d):
+                    batch_end = min(batch_start + batch_size_2d, n_slices)
+                    
+                    x_batch = torch.from_numpy(x_prime_norm[batch_start:batch_end]).float().unsqueeze(1).to(self.device)
+                    pred_batch = model(x_batch)
+                    pred_batch_np = pred_batch.cpu().numpy().squeeze(1)  # (N, H, W)
+                    pred_residuals_list.append(pred_batch_np)
+                    
+                    # Free GPU memory after each batch
+                    del x_batch, pred_batch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                
+                pred_residuals_np = np.concatenate(pred_residuals_list, axis=0)
             else:
-                x_prime_tensor = torch.from_numpy(x_prime_norm).float().unsqueeze(0).unsqueeze(0).to(self.device)
-            
-            # Predict normalized residuals
-            pred_residuals_norm = model(x_prime_tensor)
-            if spatial_dims == 2:
-                pred_residuals_np = pred_residuals_norm.cpu().numpy().squeeze(1)  # (N, H, W)
-            else:
-                pred_residuals_np = pred_residuals_norm.cpu().numpy().squeeze()  # (H, W, D)
-            
-            # Denormalize residuals (CRITICAL!)
-            pred_residuals_np = pred_residuals_np * residual_std + residual_mean
-
-        # Transpose back to original shape if in 2D mode
-        if spatial_dims == 2:
-            if slice_order == 'zxy':
-                pred_residuals_np = pred_residuals_np.transpose(1, 2, 0)  # (Z, X, Y) → (X, Y, Z)
-            elif slice_order == 'yxz':
-                pred_residuals_np = pred_residuals_np.transpose(1, 0, 2)  # (Y, X, Z) → (X, Y, Z)
-            # else: 'xyz' already in correct order
-
-        if verbose:
-            print(f"  Predicted residuals: mean={np.mean(pred_residuals_np):.3e}, "
-                  f"std={np.std(pred_residuals_np):.3e}")
-        
-        # ================================================================
-        # STEP 3: Enhance Reconstruction (X_enh = X' + R_hat)
-        # ================================================================
-        if verbose:
-            print(f"\nStep 3: Computing enhanced reconstruction...")
+                # 3D: Process in chunks along Z-axis to avoid OOM
+                batch_size_3d = metadata.get('batch_size', 32)
+                z_dim = x_prime_norm.shape[2]
+                pred_residuals_list = []
+                
+                for batch_start in range(0, z_dim, batch_size_3d):
+                    batch_end = min(batch_start + batch_size_3d, z_dim)
+                    
+                    x_batch = x_prime_norm[:, :, batch_start:batch_end]
+                    x_batch_tensor = torch.from_numpy(x_batch).float().unsqueeze(0).unsqueeze(0).to(self.device)
+                    pred_batch = model(x_batch_tensor)
+                    pred_batch_np = pred_batch.cpu().numpy().squeeze()  # (H, W, D_chunk)
+                    pred_residuals_list.append(pred_batch_np)
+                    
+                    # Free GPU memory after each batch
+                    del x_batch_tensor, pred_batch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                
+                # Concatenate along Z-axis
+                pred_residuals_np = np.concatenate(pred_residuals_list, axis=2)
         
         x_enhanced = x_prime + pred_residuals_np
         # ================================================================
@@ -973,6 +974,122 @@ class NeurLZCompressor:
         
         if output_path:
             reconstructed.astype(np.float32).tofile(output_path)
+        
+        return reconstructed
+    
+    def save_components(self, compressed_package, save_dir, base_name, verbose=True):
+        """
+        Save compressed components to separate files.
+        
+        Args:
+            compressed_package: Package from compress()
+            save_dir: Directory to save files
+            base_name: Base name for output files
+            verbose: Print progress
+        
+        Saves:
+            - {base_name}.sz3: SZ3 compressed bytes
+            - {base_name}_model.pt: Model weights (PyTorch format)
+            - {base_name}_metadata.json: Metadata (JSON format)
+        """
+        import os
+        os.makedirs(save_dir, exist_ok=True)
+        
+        # 1. Save SZ3 compressed bytes
+        sz3_path = os.path.join(save_dir, f"{base_name}.sz3")
+        with open(sz3_path, 'wb') as f:
+            f.write(compressed_package['sz_bytes'])
+        
+        # 2. Save model weights (PyTorch format)
+        model_path = os.path.join(save_dir, f"{base_name}_model.pt")
+        state_dict = {k: torch.from_numpy(v) for k, v in compressed_package['model_weights'].items()}
+        torch.save(state_dict, model_path)
+        
+        # 3. Save metadata (JSON format)
+        metadata_path = os.path.join(save_dir, f"{base_name}_metadata.json")
+        with open(metadata_path, 'w') as f:
+            json.dump(compressed_package['metadata'], f, indent=2)
+        
+        if verbose:
+            sz3_size = len(compressed_package['sz_bytes'])
+            model_size = os.path.getsize(model_path)
+            print(f"\n  Components saved to: {save_dir}/")
+            print(f"    - {base_name}.sz3: {sz3_size / 1024:.2f} KB")
+            print(f"    - {base_name}_model.pt: {model_size / 1024:.2f} KB")
+            print(f"    - {base_name}_metadata.json")
+    
+    def load_components(self, save_dir, base_name, verbose=True):
+        """
+        Load compressed components from separate files.
+        
+        Args:
+            save_dir: Directory containing saved files
+            base_name: Base name of the files
+            verbose: Print progress
+        
+        Returns:
+            compressed_package: Reconstructed package for decompress()
+        """
+        import os
+        
+        # 1. Load SZ3 compressed bytes
+        sz3_path = os.path.join(save_dir, f"{base_name}.sz3")
+        with open(sz3_path, 'rb') as f:
+            sz_bytes = f.read()
+        
+        # 2. Load model weights
+        model_path = os.path.join(save_dir, f"{base_name}_model.pt")
+        state_dict = torch.load(model_path, map_location='cpu')
+        model_weights = {k: v.numpy() for k, v in state_dict.items()}
+        
+        # 3. Load metadata
+        metadata_path = os.path.join(save_dir, f"{base_name}_metadata.json")
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+        
+        # Reconstruct package
+        compressed_package = {
+            'backend': 'SZ3',
+            'sz_bytes': sz_bytes,
+            'model_weights': model_weights,
+            'metadata': metadata,
+        }
+        
+        if verbose:
+            print(f"\n  Components loaded from: {save_dir}/")
+            print(f"    - {base_name}.sz3: {len(sz_bytes) / 1024:.2f} KB")
+            print(f"    - {base_name}_model.pt")
+            print(f"    - {base_name}_metadata.json")
+        
+        return compressed_package
+    
+    def reconstruct_from_components(self, save_dir, base_name, output_path=None, 
+                                    verbose=True, enable_post_process=False):
+        """
+        Reconstruct original data from saved components.
+        
+        Args:
+            save_dir: Directory containing saved files
+            base_name: Base name of the files
+            output_path: Optional path to save reconstructed data as .f32 file
+            verbose: Print progress
+            enable_post_process: Apply post-processing
+        
+        Returns:
+            reconstructed: Decompressed data (numpy array)
+        """
+        # Load components
+        package = self.load_components(save_dir, base_name, verbose)
+        
+        # Decompress
+        reconstructed = self.decompress(package, verbose=verbose, enable_post_process=enable_post_process)
+        
+        # Save if path provided
+        if output_path:
+            reconstructed.astype(np.float32).tofile(output_path)
+            if verbose:
+                print(f"  Reconstructed data saved to: {output_path}")
+                print(f"  Size: {reconstructed.nbytes / (1024**2):.2f} MB")
         
         return reconstructed
     

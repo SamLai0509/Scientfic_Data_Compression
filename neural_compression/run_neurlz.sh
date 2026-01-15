@@ -100,7 +100,7 @@ echo ""
 
 # Configuration
 DATA_DIR="/Users/923714256/Data_compression/SDRBENCH-EXASKY-NYX-512x512x512"
-OUTPUT_DIR="/Users/923714256/Data_compression/neural_compression/evaluation_results_correct"
+OUTPUT_DIR="/Users/923714256/Data_compression/neural_compression/2d_postprocess_result/evaluation_results_correct"
 SZ_LIB="/Users/923714256/Data_compression/SZ3/build/lib64/libSZ3c.so"
 
 # Test files
@@ -114,7 +114,7 @@ ERROR_PWR_BOUNDS="0"
 EB_MODES="1"
 MODEL="tiny_frequency_residual_predictor_7_inputs"
 PATCH_SIZE=256
-
+BATCH_SIZE=512
 # Online training parameters
 ONLINE_EPOCHS=100
 LEARNING_RATE=1e-3
@@ -128,6 +128,10 @@ SLICE_ORDER="zxy"
 VAL_SPLIT=0.1
 # TRACK_LOSSES is a boolean flag, no value needed (--track_losses enables it)
 TRACK_LOSSES=true  # set to "true" or "false"
+
+# Save components (SZ3 bytes, model weights, metadata) separately
+SAVE_COMPONENTS=true  # set to "true" or "false"
+COMPONENTS_DIR="/Users/923714256/Data_compression/neural_compression/2d_postprocess_result/frequency_residual_predictor_7_inputs_results_postprocess"
 
 NUM_RUNS=5
 mkdir -p $OUTPUT_DIR
@@ -151,6 +155,9 @@ echo "  GPU mode: $GPU_MODE"
 echo "  Number of runs: $NUM_RUNS"
 echo "  Enable post-process: $ENABLE_POST_PROCESS"
 echo "  Patch size: $PATCH_SIZE"
+echo "  Batch size: $BATCH_SIZE"
+echo "  Save components: $SAVE_COMPONENTS"
+echo "  Components directory: $COMPONENTS_DIR"
 echo ""
 
 # Build track_losses flag (store_true args don't take values)
@@ -163,6 +170,13 @@ fi
 ENABLE_POST_PROCESS_FLAG=""
 if [ "$ENABLE_POST_PROCESS" = "true" ]; then
     ENABLE_POST_PROCESS_FLAG="--enable_post_process"
+fi
+
+# Build save_components flag (store_true args don't take values)
+SAVE_COMPONENTS_FLAG=""
+if [ "$SAVE_COMPONENTS" = "true" ]; then
+    SAVE_COMPONENTS_FLAG="--save_components"
+    mkdir -p $COMPONENTS_DIR
 fi
 
 python evaluate_neurlz_correct.py \
@@ -186,4 +200,7 @@ python evaluate_neurlz_correct.py \
     --num_runs $NUM_RUNS \
     $TRACK_LOSSES_FLAG \
     $ENABLE_POST_PROCESS_FLAG \
-    --Patch_size $PATCH_SIZE
+    --Patch_size $PATCH_SIZE \
+    --Batch_size $BATCH_SIZE \
+    $SAVE_COMPONENTS_FLAG \
+    --components_dir "$COMPONENTS_DIR"
