@@ -117,9 +117,22 @@ class NeurLZCompressor:
     """
     
     def __init__(self, sz_lib_path="/Users/923714256/Data_compression/SZ3/build/lib64/libSZ3c.so",
-                 device='cuda:0'):
+                 device=None):
         self.sz = SZ(sz_lib_path)
-        self.device = device
+        # Auto-detect device: use CUDA if available, otherwise CPU
+        if device is None:
+            if torch.cuda.is_available():
+                self.device = 'cuda:0'
+            else:
+                self.device = 'cpu'
+                print("Use cpu when no gpu detected")
+        else:
+            # If device is specified, validate it
+            if device.startswith('cuda') and not torch.cuda.is_available():
+                print(f"Warning: CUDA not available, using CPU instead")
+                self.device = 'cpu'
+            else:
+                self.device = device
     
     def compress(self, data, eb_mode, absolute_error_bound, relative_error_bound, pwr_error_bound, output_path=None,
                 online_epochs=50, learning_rate=1e-3, model='tiny_residual_predictor', num_res_blocks=1,
@@ -127,7 +140,7 @@ class NeurLZCompressor:
                 spatial_dims=3, slice_order='zxy',
                 val_split=0.1, track_losses=True,
                 Patch_size=256,Batch_size=512,
-                ):
+                save_components=False, components_dir='./compressed_components', filename='data'):
         """
         NeurLZ compression pipeline.
         
@@ -148,7 +161,11 @@ class NeurLZCompressor:
             slice_order: 'xyz', 'zxy', or 'yxz' (only used when spatial_dims=2)
             val_split: Fraction of data to use for validation (0.0-1.0)
             track_losses: Whether to track training and validation losses
-        
+            Patch_size: Patch size for local decompression and training
+            Batch_size: Batch size for training
+            save_components: Whether to save components
+            components_dir: Directory to save components
+            filename: Filename to save components
         Returns:
             compressed_package: Dict with {sz_bytes, model_weights, outliers, metadata}
             stats: Compression statistics
@@ -251,19 +268,14 @@ class NeurLZCompressor:
         available_gpus = get_available_gpus()
         use_multi_gpu = len(available_gpus) > 1
 
-
-        # ============================================================
-        # Define model and criterion
-        # ============================================================
-
         # ============================================================
         # Tiny Simple Residual Predictor
         # ============================================================
         if model_type == 'tiny_residual_predictor': 
             criterion = SpatialFrequencyLoss(
                 weight_spatial=1.0,
-                weight_magnitude=1,
-                weight_phase=1,
+                weight_magnitude=0,
+                weight_phase=0,
                 spatial_dims=spatial_dims
             )
             base_model = TinyResidualPredictor(
@@ -712,7 +724,7 @@ class NeurLZCompressor:
         return compressed_package, stats
 
     def _error_bounded_post_process(self, x_enhanced, x_prime, absolute_error_bound, 
-                                    relative_error_bound=0.0, verbose=False, a=0.5, block_size=256):
+                                    relative_error_bound=0.0, verbose=False, a=1, block_size=256):
         """
         Error-bounded post-processing using quadratic Bezier curve smoothing at block boundaries.
         
@@ -754,24 +766,28 @@ class NeurLZCompressor:
         else:
             effective_bound = absolute_error_bound
 
-
         d = x_enhanced
         d_prime = d.copy()
         X, Y, Z = d.shape
 
         for i in range(block_size - 1, X - 1, block_size):
-            d3 = d[i - 1, :, :]   # Left block inner point
-            d4 = d[i, :, :]       # Boundary point
-            d5 = d[i + 1, :, :]   # Right block inner point
-
-            # B(0.5) = 0.25*d3 + 0.5*d4 + 0.25*d5
+            d3 = d[i - 1, :, :]
+            d4 = d[i, :, :]
+            d5 = d[i + 1, :, :]
             B = 0.25 * d3 + 0.5 * d4 + 0.25 * d5
-
-
-            # d' = clamp(B, d4 ± a*eb)
             upper = d4 + a * effective_bound
             lower = d4 - a * effective_bound
             d_prime[i, :, :] = np.maximum(np.minimum(B, upper), lower)
+
+            # d' = clamp(B, d4 ± a*eb)
+        for j in range(block_size - 1, Y - 1, block_size):
+            d3 = d[:, j - 1, :]
+            d4 = d[:, j, :]
+            d5 = d[:, j + 1, :]
+            B = 0.25 * d3 + 0.5 * d4 + 0.25 * d5
+            upper = d4 + a * effective_bound
+            lower = d4 - a * effective_bound
+            d_prime[:, j, :] = np.maximum(np.minimum(B, upper), lower)
         if verbose:
             max_delta = np.max(np.abs(d_prime - d))
             print(f"  Post-processing applied (Bezier boundary):")
@@ -940,15 +956,37 @@ class NeurLZCompressor:
                 
                 # Concatenate along Z-axis
                 pred_residuals_np = np.concatenate(pred_residuals_list, axis=2)
+               
+            pred_residuals_np = pred_residuals_np * residual_std + residual_mean
+
+        # Transpose back to original shape if in 2D mode
+        if spatial_dims == 2:
+            if slice_order == 'zxy':
+                pred_residuals_np = pred_residuals_np.transpose(1, 2, 0)  # (Z, X, Y) → (X, Y, Z)
+            elif slice_order == 'yxz':
+                pred_residuals_np = pred_residuals_np.transpose(1, 0, 2)  # (Y, X, Z) → (X, Y, Z)
+            # else: 'xyz' already in correct order        
+
+        if verbose:
+            print(f"  Predicted residuals: mean={np.mean(pred_residuals_np):.3e}, "
+                  f"std={np.std(pred_residuals_np):.3e}")
+
+
+        # ================================================================
+        # STEP 3: Enhance Reconstruction (X_enh = X' + R_hat)
+        # ================================================================
+        if verbose:
+            print(f"\nStep 3: Computing enhanced reconstruction...")
         
         x_enhanced = x_prime + pred_residuals_np
+
         # ================================================================
         # STEP 4: Error-Bounded Post-Processing (Optional)
         # ================================================================
         if enable_post_process:
             if verbose:
                 print(f"\nStep 4: Applying error-bounded post-processing...")
-                
+
             relative_error_bound = metadata.get('relative_error_bound', 0.0)
             x_enhanced = self._error_bounded_post_process(
                 x_enhanced=x_enhanced,
@@ -956,17 +994,16 @@ class NeurLZCompressor:
                 absolute_error_bound=absolute_error_bound,
                 relative_error_bound=relative_error_bound,
                 verbose=verbose
-            )
+            )        
+        decompress_time = time.time() - decompress_start       
 
-        decompress_time = time.time() - decompress_start
-        
         if verbose:
             print(f"\nDecompression complete: {x_enhanced.shape}")
             print(f"Time: {decompress_time:.2f}s")
             print(f"{'='*70}\n")
         
-        return x_enhanced
-    
+        return x_enhanced             
+
     def compress_file(self, input_path, output_path, eb_mode, absolute_error_bound, relative_error_bound, pwr_error_bound=0.0, **kwargs):
         """Compress a file."""
         data = np.fromfile(input_path, dtype=np.float32).reshape(512, 512, 512)
@@ -1048,10 +1085,10 @@ class NeurLZCompressor:
         """
         import os
         
-        # 1. Load SZ3 compressed bytes
+        # 1. Load SZ3 compressed bytes (as numpy array for ctypes compatibility)
         sz3_path = os.path.join(save_dir, f"{base_name}.sz3")
         with open(sz3_path, 'rb') as f:
-            sz_bytes = f.read()
+            sz_bytes = np.frombuffer(f.read(), dtype=np.uint8)
         
         # 2. Load model weights
         model_path = os.path.join(save_dir, f"{base_name}_model.pt")
@@ -1099,6 +1136,9 @@ class NeurLZCompressor:
         
         # Decompress
         reconstructed = self.decompress(package, verbose=verbose, enable_post_process=enable_post_process)
+        
+
+        # Decompress file with SZ3 + Neural Network enhancement 
         
         # Save if path provided
         if output_path:

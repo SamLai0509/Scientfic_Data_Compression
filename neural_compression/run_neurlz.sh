@@ -2,7 +2,7 @@
 #SBATCH --job-name=SZ3+NeurLZ
 #SBATCH --partition=gpucluster
 #SBATCH --time=8:00:00     
-#SBATCH --output=7inputfreq2d_multiloss_postprocess%j.out
+#SBATCH --output=7inputfreq2d_multiloss_postprocess_a_1%j.out
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4   
 #SBATCH --nodes=1                   
@@ -131,7 +131,7 @@ TRACK_LOSSES=true  # set to "true" or "false"
 
 # Save components (SZ3 bytes, model weights, metadata) separately
 SAVE_COMPONENTS=true  # set to "true" or "false"
-COMPONENTS_DIR="/Users/923714256/Data_compression/neural_compression/2d_postprocess_result/frequency_residual_predictor_7_inputs_results_postprocess"
+COMPONENTS_DIR="/Users/923714256/Data_compression/neural_compression/2d_postprocess_result/frequency_residual_predictor_7_inputs_results_postprocess_a_1"
 
 NUM_RUNS=5
 mkdir -p $OUTPUT_DIR

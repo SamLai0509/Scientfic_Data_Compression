@@ -194,7 +194,8 @@ def evaluate_neurlz(compressor, data, eb_mode, absolute_error_bound, relative_er
         online_epochs=online_epochs, learning_rate=learning_rate,
         model_channels=model_channels, model=model, verbose=True,
         spatial_dims=spatial_dims, slice_order=slice_order, val_split=val_split,
-        track_losses=track_losses, num_res_blocks=num_res_blocks, Patch_size=Patch_size, Batch_size=Batch_size
+        track_losses=track_losses, num_res_blocks=num_res_blocks, Patch_size=Patch_size,
+        Batch_size=Batch_size, save_components=save_components, components_dir=components_dir, filename=filename
     )
     
     # Save components if requested
@@ -633,7 +634,7 @@ def main():
             return obj
     
     # Save results
-    output_file = os.path.join(args.output_dir, 'neurlz_correct_results.json')
+    output_file = os.path.join(args.output_dir, 'neurlz_correct_results_7inputfreq2d_multiloss_postprocess.json')
     with open(output_file, 'w') as f:
         serializable_data = {
             'results': convert_to_json_serializable(all_results),
